@@ -75,6 +75,13 @@ class DirectConfirmReservationResponse(BaseModel):
     message: str = Field(default="Reserva confirmada exitosamente")
 
 
+class CancelReservationResponse(BaseModel):
+    """Respuesta al cancelar una reserva"""
+    reservation_id: int
+    status: str = Field(default="CANCELLED")
+    message: str = Field(default="Reservation cancelled successfully")
+
+
 # ============================================================================
 # HU-20: WEBHOOK STRIPE
 # ============================================================================
@@ -146,12 +153,18 @@ class ReservationListResponse(BaseModel):
     id: int
     track_id: int
     track_name: str
-    coach_id: Optional[int]
-    coach_name: Optional[str]
-    pilot_name: Optional[str]
+    coach_id: Optional[int] = None
+    coach_name: Optional[str] = None
+    pilot_name: Optional[str] = None
     reservation_date: DateType
     start_time: TimeType
     end_time: TimeType
+    participants: int = 1
+    pilot_type: Optional[str] = None
+    class_type: Optional[str] = None
+    class_mode: Optional[str] = None
+    track_price: Optional[float] = None
+    coach_price: Optional[float] = None
     total_amount: float
     coach_earnings: Optional[float] = None
     status: str

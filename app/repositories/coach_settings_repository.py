@@ -6,6 +6,7 @@ from app.models.coach import Coach
 from app.models.coach_track import CoachTrack
 from app.models.coach_service import CoachService
 from app.models.coach_availability import CoachAvailability
+from app.models.track_availability import TrackAvailability
 from app.models.track import Track
 from app.schemas.coach_settings_schema import (
     CoachSettingsRequest,
@@ -131,6 +132,34 @@ class CoachSettingsRepository:
                 CoachAvailability.date == date_val,
             )
             .order_by(CoachAvailability.start_time)
+            .all()
+        )
+
+        for slot in slots:
+            slot_start = combine_date_time(slot.date, slot.start_time)
+            slot_end = combine_date_time(slot.date, slot.end_time)
+            if interval_contains(slot_start, slot_end, request_start, request_end):
+                return slot
+        return None
+
+    def get_covering_track_availability(
+        self,
+        track_id: int,
+        date_val: date,
+        start: time,
+        end: time,
+    ) -> Optional[TrackAvailability]:
+        """Return the track slot that fully contains the coach window, if any."""
+        request_start = combine_date_time(date_val, start)
+        request_end = combine_date_time(date_val, end)
+
+        slots = (
+            self.db.query(TrackAvailability)
+            .filter(
+                TrackAvailability.track_id == track_id,
+                TrackAvailability.date == date_val,
+            )
+            .order_by(TrackAvailability.start_time)
             .all()
         )
 

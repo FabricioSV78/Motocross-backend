@@ -154,8 +154,17 @@ class ReservationService:
             if track_slot.pilot_category != "BOTH" and pilot_type_value != track_slot.pilot_category:
                 availability_available = False
             if not coach_id:
+                # Permitir reservar HALF_DAY incluso si el slot es FULL_DAY (ej: una franja de 9-17
+                # puede aceptar una reserva de medio día). Sin embargo, si el slot es HALF_DAY no
+                # se debe aceptar una reserva FULL_DAY.
                 if class_type_value in {ClassType.FULL_DAY.value, ClassType.HALF_DAY.value}:
-                    if track_slot.rental_type != class_type_value:
+                    slot_rental = track_slot.rental_type
+                    # Aceptar cuando el slot y la petición coincidan, o cuando el slot sea FULL_DAY
+                    # y la petición sea HALF_DAY (medio día dentro de día completo).
+                    if not (
+                        slot_rental == class_type_value
+                        or (slot_rental == ClassType.FULL_DAY.value and class_type_value == ClassType.HALF_DAY.value)
+                    ):
                         availability_available = False
         
         # Calcular costo de coach si aplica
@@ -459,6 +468,48 @@ class ReservationService:
             PaymentRepository.update_payment_status(db, payment.id, PaymentStatus.SUCCESS)
         
         return reservation
+
+    @staticmethod
+    def cancel_reservation(db: Session, reservation_id: int, user_id: int) -> Reservation:
+        """Cancelar una reserva propia del piloto."""
+        reservation = ReservationRepository.get_reservation_by_id(db, reservation_id)
+
+        if not reservation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Reservation not found",
+            )
+
+        if reservation.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only cancel your own reservations",
+            )
+
+        current_status = getattr(reservation.status, "value", reservation.status)
+        if current_status == ReservationStatus.CANCELLED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This reservation is already cancelled",
+            )
+        if current_status == ReservationStatus.COMPLETED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Completed reservations cannot be cancelled",
+            )
+
+        reservation_start = combine_date_time(reservation.reservation_date, reservation.start_time)
+        if reservation_start <= datetime.now():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Past reservations cannot be cancelled",
+            )
+
+        return ReservationRepository.update_reservation_status(
+            db=db,
+            reservation_id=reservation.id,
+            status=ReservationStatus.CANCELLED,
+        )
     
     @staticmethod
     def handle_payment_failed(db: Session, stripe_payment_intent_id: str) -> Reservation:

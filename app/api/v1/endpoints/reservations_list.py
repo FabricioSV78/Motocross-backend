@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_active_user
 from app.models import User
 from app.schemas.reservation_schema import (
+    CancelReservationResponse,
     ReservationDetailResponse,
     ReservationListResponse,
 )
@@ -11,6 +12,30 @@ from app.services.reservation_service import ReservationService
 
 
 router = APIRouter()
+
+
+def _reservation_list_response(res) -> ReservationListResponse:
+    return ReservationListResponse(
+        id=res.id,
+        track_id=res.track_id,
+        track_name=res.track.name if res.track else "Unknown",
+        coach_id=res.coach_id,
+        coach_name=res.coach.user.nombre if res.coach else None,
+        pilot_name=res.user.nombre if res.user else None,
+        reservation_date=res.reservation_date,
+        start_time=res.start_time,
+        end_time=res.end_time,
+        participants=res.participants,
+        pilot_type=getattr(res.pilot_type, "value", res.pilot_type),
+        class_type=res.class_type,
+        class_mode=res.class_mode,
+        track_price=res.track_price,
+        coach_price=res.coach_price,
+        total_amount=res.total_amount,
+        coach_earnings=res.coach_price,
+        status=getattr(res.status, "value", res.status),
+        created_at=res.created_at.isoformat(),
+    )
 
 
 # ============================================================================
@@ -29,27 +54,7 @@ def list_my_reservations(
     """
     reservations = ReservationService.get_user_reservations(db, current_user.id)
 
-    result = []
-    for res in reservations:
-        result.append(
-            ReservationListResponse(
-                id=res.id,
-                track_id=res.track_id,
-                track_name=res.track.name if res.track else "Unknown",
-                coach_id=res.coach_id,
-                coach_name=res.coach.user.nombre if res.coach else None,
-                pilot_name=res.user.nombre if res.user else None,
-                reservation_date=res.reservation_date,
-                start_time=res.start_time,
-                end_time=res.end_time,
-                total_amount=res.total_amount,
-                coach_earnings=res.coach_price if hasattr(res, 'coach_price') else (res.coach_price if hasattr(res, 'coach_price') else None),
-                status=res.status,
-                created_at=res.created_at.isoformat(),
-            )
-        )
-
-    return result
+    return [_reservation_list_response(res) for res in reservations]
 
 
 # ============================================================================
@@ -70,6 +75,7 @@ def get_reservation_detail(
     reservation = ReservationService.get_reservation_detail(
         db, reservation_id, current_user.id
     )
+
 
     payment_detail = None
     if reservation.payment:
@@ -109,6 +115,30 @@ def get_reservation_detail(
     )
 
 
+@router.patch("/{reservation_id}/cancel", response_model=CancelReservationResponse)
+def cancel_my_reservation(
+    reservation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Cancelar una reserva propia del piloto.
+
+    El cambio se refleja en las vistas del piloto, coach y empresa porque todas
+    leen el mismo estado de la reserva.
+    """
+    reservation = ReservationService.cancel_reservation(
+        db=db,
+        reservation_id=reservation_id,
+        user_id=current_user.id,
+    )
+    return CancelReservationResponse(
+        reservation_id=reservation.id,
+        status=getattr(reservation.status, "value", reservation.status),
+        message="Reservation cancelled successfully",
+    )
+
+
 # ============================================================================
 # GET /reservations/coach/mine - Coach reservations
 # ============================================================================
@@ -142,27 +172,7 @@ def get_coach_reservations(
 
     reservations = ReservationService.get_coach_reservations(db, coach.id)
 
-    result = []
-    for res in reservations:
-        result.append(
-            ReservationListResponse(
-                id=res.id,
-                track_id=res.track_id,
-                track_name=res.track.name if res.track else "Unknown",
-                coach_id=res.coach_id,
-                coach_name=res.coach.user.nombre if res.coach else None,
-                pilot_name=res.user.nombre if res.user else None,
-                reservation_date=res.reservation_date,
-                start_time=res.start_time,
-                end_time=res.end_time,
-                total_amount=res.total_amount,
-                coach_earnings=res.coach_price if hasattr(res, 'coach_price') else (res.coach_price if hasattr(res, 'coach_price') else None),
-                status=res.status,
-                created_at=res.created_at.isoformat(),
-            )
-        )
-
-    return result
+    return [_reservation_list_response(res) for res in reservations]
 
 
 # ============================================================================
@@ -182,7 +192,7 @@ def get_track_reservations(
     """
     from app.repositories.tracks_repository import TracksRepository
     track_repo = TracksRepository(db)
-    track = track_repo.get_track_by_id(track_id)
+    track = track_repo.get_by_id(track_id)
 
     if not track:
         raise HTTPException(
@@ -198,22 +208,4 @@ def get_track_reservations(
 
     reservations = ReservationService.get_track_reservations(db, track_id)
 
-    result = []
-    for res in reservations:
-        result.append(
-            ReservationListResponse(
-                id=res.id,
-                track_id=res.track_id,
-                track_name=res.track.name if res.track else "Unknown",
-                coach_id=res.coach_id,
-                coach_name=res.coach.user.nombre if res.coach else None,
-                reservation_date=res.reservation_date,
-                start_time=res.start_time,
-                end_time=res.end_time,
-                total_amount=res.total_amount,
-                status=res.status,
-                created_at=res.created_at.isoformat(),
-            )
-        )
-
-    return result
+    return [_reservation_list_response(res) for res in reservations]

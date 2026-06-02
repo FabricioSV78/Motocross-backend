@@ -19,6 +19,13 @@ class CoachSettingsService:
     def __init__(self, repo: CoachSettingsRepository):
         self.repo = repo
 
+    @staticmethod
+    def _track_slot_accepts_service(track_slot, class_type) -> bool:
+        class_type_value = class_type.value if hasattr(class_type, "value") else class_type
+        if class_type_value == "FULL_DAY":
+            return track_slot.rental_type == "FULL_DAY"
+        return track_slot.rental_type in {"HALF_DAY", "FULL_DAY"}
+
     def _get_coach_or_404(self, user_id: int):
         coach = self.repo.get_coach_by_user_id(user_id)
         if not coach:
@@ -121,6 +128,20 @@ class CoachSettingsService:
         start = time.fromisoformat(req.startTime)
         end = time.fromisoformat(req.endTime)
 
+        track_slot = self.repo.get_covering_track_availability(
+            req.trackId, req.date, start, end
+        )
+        if not track_slot:
+            raise HTTPException(
+                status_code=400,
+                detail="This coach time must fit inside a published availability window for the selected track. Choose one of the track's available time slots first.",
+            )
+        if not self._track_slot_accepts_service(track_slot, req.classType):
+            raise HTTPException(
+                status_code=400,
+                detail="This service type is not compatible with the selected track availability window.",
+            )
+
         # Overlap check
         overlap = self.repo.get_overlapping_availability(
             coach.id, req.date, start, end
@@ -187,11 +208,18 @@ class CoachSettingsService:
         end = time_type.fromisoformat(req.endTime)
 
         to_create = []
-        skipped = 0
+        skipped_overlap = 0
+        skipped_track = 0
         for d in req.dates:
+            track_slot = self.repo.get_covering_track_availability(
+                req.trackId, d, start, end
+            )
+            if not track_slot or not self._track_slot_accepts_service(track_slot, req.classType):
+                skipped_track += 1
+                continue
             overlap = self.repo.get_overlapping_availability(coach.id, d, start, end)
             if overlap:
-                skipped += 1
+                skipped_overlap += 1
             else:
                 to_create.append(d)
 
@@ -200,8 +228,12 @@ class CoachSettingsService:
             self.repo.db.commit()
 
         created = len(to_create)
+        skipped = skipped_overlap + skipped_track
         return AvailabilityBatchResponse(
             created=created,
             skipped=skipped,
-            message=f"{created} slot(s) created, {skipped} skipped due to overlaps.",
+            message=(
+                f"{created} slot(s) created, {skipped} skipped "
+                f"({skipped_overlap} coach overlap, {skipped_track} without matching track availability)."
+            ),
         )
