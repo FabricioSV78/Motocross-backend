@@ -12,7 +12,7 @@ Credenciales del admin creado:
     Password: Admin1234!
 """
 from app.db.session import SessionLocal
-from app.db.base import Base  # noqa: F401 — registra todos los modelos con SQLAlchemy
+from app.db.base import Base  
 from app.models.user import User
 from app.models.enums import Role, Status
 from app.core.security import get_password_hash
