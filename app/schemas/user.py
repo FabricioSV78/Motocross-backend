@@ -143,6 +143,7 @@ class UserBasicInfo(BaseModel):
     
     id: int
     email: EmailStr
+    nombre: str
 
 
 class LoginResponse(BaseModel):
@@ -193,8 +194,8 @@ class UploadPhotoResponse(BaseModel):
 
 class UserProfileResponse(BaseModel):
     """
-    Schema para respuesta de perfil completo de usuario piloto
-    HU-05: Ver perfil
+    Schema para respuesta de perfil completo de usuario piloto y coach
+    HU-05 / HU-09
     """
     model_config = ConfigDict(from_attributes=True)
     
@@ -203,12 +204,22 @@ class UserProfileResponse(BaseModel):
     nombre: str
     foto: Optional[str] = None
     foto_moto: Optional[str] = None
-    nivel: PilotLevel
+    nivel: Optional[PilotLevel] = None
     moto: Optional[str] = None
+    
+    # Campos adicionales para Coach
+    role: Optional[str] = None
+    status: Optional[str] = None
+    telefono: Optional[str] = None
+    bio: Optional[str] = None
+    experience: Optional[str] = None
+    certificate_url: Optional[str] = None
     
     @field_validator('nivel', mode='before')
     @classmethod
     def nivel_to_enum(cls, v):
+        if v is None:
+            return None
         if isinstance(v, str):
             return PilotLevel(v)
         return v
@@ -223,14 +234,19 @@ class PilotProfileCreate(BaseModel):
 
 class UpdateUserProfileRequest(BaseModel):
     """
-    Schema para actualizar perfil completo del piloto
-    HU-06: Editar perfil
+    Schema para actualizar perfil completo (piloto o coach)
+    HU-06 / CRUD coach
     """
     nombre: str = Field(..., min_length=1, description="Nombre del usuario")
     foto: Optional[str] = None
     foto_moto: Optional[str] = None
     nivel: Optional[PilotLevel] = None
     moto: Optional[str] = None
+    
+    # Campos adicionales para Coach
+    telefono: Optional[str] = None
+    bio: Optional[str] = None
+    experience: Optional[str] = None
 
     @field_validator('nivel', mode='before')
     @classmethod

@@ -12,6 +12,7 @@ from app.schemas.track_schema import (
     TrackAvailabilityResponse,
 )
 from app.repositories.tracks_repository import TracksRepository
+from app.repositories.reservation_repository import ReservationRepository
 
 
 class TracksService:
@@ -45,6 +46,27 @@ class TracksService:
                 detail="You do not have permission to edit this track",
             )
         return track
+
+    def _availability_with_occupancy(self, slot) -> TrackAvailabilityResponse:
+        overlaps = ReservationRepository.get_overlapping_reservations(
+            self.db,
+            slot.track_id,
+            slot.date,
+            slot.start_time,
+            slot.end_time,
+        )
+        reserved = sum(max(r.participants or 0, 0) for r in overlaps)
+        return TrackAvailabilityResponse.from_orm_slot(slot, reserved=reserved)
+
+    def _get_lowest_track_price(self, track: Track) -> float:
+        prices = [
+            track.price_junior,
+            track.price_senior,
+            track.price_junior_half,
+            track.price_senior_half,
+        ]
+        valid_prices = [price for price in prices if price is not None and price > 0]
+        return min(valid_prices) if valid_prices else 0.0
 
     def create_track(self, track_data: TrackCreate, current_user: User) -> Track:
         """
@@ -93,7 +115,7 @@ class TracksService:
                 name=t.name,
                 lat=t.latitude,
                 lng=t.longitude,
-                price=t.price_junior,
+                price=self._get_lowest_track_price(t),
                 rating=0.0,
                 difficulty_level=t.difficulty_level,
             )
@@ -141,6 +163,9 @@ class TracksService:
                     name=coach.user.nombre,
                     status=coach.status,
                     services=services,
+                    foto=coach.foto,
+                    bio=coach.bio,
+                    experience=coach.experience,
                 )
             )
 
@@ -265,7 +290,7 @@ class TracksService:
             s for s in self.repo.get_availability_by_track(track_id)
             if s.date >= today
         ]
-        return [TrackAvailabilityResponse.from_orm_slot(s) for s in slots]
+        return [self._availability_with_occupancy(s) for s in slots]
 
     def get_available_slots_for_date(self, track_id: int, date_str: str) -> List[TrackAvailabilityResponse]:
         """
@@ -299,4 +324,4 @@ class TracksService:
 
         # Obtener slots para esa fecha
         slots = self.repo.get_availability_by_track_and_date(track_id, date_val)
-        return [TrackAvailabilityResponse.from_orm_slot(s) for s in slots]
+        return [self._availability_with_occupancy(s) for s in slots]

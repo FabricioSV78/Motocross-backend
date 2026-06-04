@@ -141,11 +141,20 @@ class TrackAvailabilityResponse(BaseModel):
     capacity: int
     rentalType: str
     pilotCategory: str = "BOTH"
+    reserved: int = 0
+    remaining: int = 0
+    isFull: bool = False
+    occupancyPercent: float = 0.0
 
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_orm_slot(cls, slot) -> "TrackAvailabilityResponse":
+    def from_orm_slot(cls, slot, reserved: int = 0) -> "TrackAvailabilityResponse":
+        safe_capacity = max(slot.capacity or 0, 0)
+        safe_reserved = max(reserved or 0, 0)
+        remaining = max(safe_capacity - safe_reserved, 0)
+        occupancy_percent = round((safe_reserved / safe_capacity) * 100, 1) if safe_capacity else 100.0
+
         return cls(
             id=slot.id,
             track_id=slot.track_id,
@@ -155,6 +164,10 @@ class TrackAvailabilityResponse(BaseModel):
             capacity=slot.capacity,
             rentalType=slot.rental_type,
             pilotCategory=slot.pilot_category,
+            reserved=safe_reserved,
+            remaining=remaining,
+            isFull=remaining <= 0,
+            occupancyPercent=min(occupancy_percent, 100.0),
         )
 
 
@@ -205,6 +218,9 @@ class CoachDetailForTrack(BaseModel):
     name: str
     status: str          # PENDING, APPROVED, REJECTED
     services: List[CoachServiceResponse]
+    foto: Optional[str] = None
+    bio: Optional[str] = None
+    experience: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

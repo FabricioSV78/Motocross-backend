@@ -31,19 +31,19 @@ def log_header(msg):
     print(f"{Color.HEADER}{Color.BOLD}{'='*70}{Color.ENDC}\n")
 
 def log_step(msg):
-    print(f"{Color.CYAN}→ {msg}{Color.ENDC}")
+    print(f"{Color.CYAN}-> {msg}{Color.ENDC}")
 
 def log_success(msg):
-    print(f"{Color.GREEN}✅ {msg}{Color.ENDC}")
+    print(f"{Color.GREEN}[OK] {msg}{Color.ENDC}")
 
 def log_error(msg):
-    print(f"{Color.RED}❌ {msg}{Color.ENDC}")
+    print(f"{Color.RED}[ERROR] {msg}{Color.ENDC}")
 
 def log_warning(msg):
-    print(f"{Color.YELLOW}⚠️  {msg}{Color.ENDC}")
+    print(f"{Color.YELLOW}[WARNING] {msg}{Color.ENDC}")
 
 def log_info(msg):
-    print(f"{Color.BLUE}ℹ️  {msg}{Color.ENDC}")
+    print(f"{Color.BLUE}[INFO] {msg}{Color.ENDC}")
 
 def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}

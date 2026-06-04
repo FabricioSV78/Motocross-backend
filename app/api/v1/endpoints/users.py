@@ -9,7 +9,8 @@ from app.services.user import UserService
 from app.api.deps import get_current_active_user, get_current_admin
 from app.models.user import User
 from app.models.pilot_profile import PilotProfile
-from app.models.enums import Role, PilotLevel
+from app.models.coach import Coach
+from app.models.enums import Role, PilotLevel, Status
 
 
 router = APIRouter()
@@ -78,14 +79,18 @@ async def upload_photo(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Subir foto de perfil o de moto del piloto autenticado.
+    Subir foto de perfil o de moto del usuario autenticado (piloto o coach).
     tipo: 'avatar' | 'moto'
     - Elimina el archivo anterior del disco (evita archivos huérfanos).
     - Guarda la ruta relativa en BD (no la URL absoluta), para que no quede
       atado a un host específico y funcione en cualquier entorno.
     """
-    if tipo not in ("avatar", "moto"):
-        raise HTTPException(status_code=400, detail="tipo debe ser 'avatar' o 'moto'")
+    if current_user.role == Role.COACH.value:
+        if tipo != "avatar":
+            raise HTTPException(status_code=400, detail="Coaches can only upload 'avatar' photos.")
+    else:
+        if tipo not in ("avatar", "moto"):
+            raise HTTPException(status_code=400, detail="tipo debe ser 'avatar' o 'moto'")
 
     ALLOWED = {"image/jpeg", "image/png", "image/webp"}
     if file.content_type not in ALLOWED:
@@ -100,23 +105,34 @@ async def upload_photo(
         ext = "jpg"
     filename = f"{tipo}_{current_user.id}_{uuid.uuid4().hex[:10]}.{ext}"
 
-    # Cargar o crear el perfil de piloto
-    pilot_profile = db.query(PilotProfile).filter(PilotProfile.user_id == current_user.id).first()
-    if not pilot_profile:
-        pilot_profile = PilotProfile(user_id=current_user.id, nivel=PilotLevel.BEGINNER.value)
-        db.add(pilot_profile)
-        db.flush()  # obtener ID sin commit todavía
+    # Cargar o crear el perfil según el rol
+    pilot_profile = None
+    coach = None
+    old_path = None
+
+    if current_user.role == Role.COACH.value:
+        coach = db.query(Coach).filter(Coach.user_id == current_user.id).first()
+        if not coach:
+            coach = Coach(user_id=current_user.id, status=Status.PENDING.value)
+            db.add(coach)
+            db.flush()
+        old_path = coach.foto
+    else:
+        pilot_profile = db.query(PilotProfile).filter(PilotProfile.user_id == current_user.id).first()
+        if not pilot_profile:
+            pilot_profile = PilotProfile(user_id=current_user.id, nivel=PilotLevel.BEGINNER.value)
+            db.add(pilot_profile)
+            db.flush()
+        old_path = pilot_profile.foto if tipo == "avatar" else pilot_profile.foto_moto
 
     # Eliminar el archivo anterior del disco para no acumular huérfanos
-    old_path: str | None = pilot_profile.foto if tipo == "avatar" else pilot_profile.foto_moto
     if old_path:
-        # Intentar eliminar en R2 si está configurado
         try:
             key = storage_service.key_from_url(old_path)
             if key and storage_service.enabled:
                 storage_service.delete(key)
             else:
-                old_filename = old_path.rsplit("/", 1)[-1]  # funciona con '/uploads/x.jpg' o 'http://.../x.jpg'
+                old_filename = old_path.rsplit("/", 1)[-1]
                 old_file = UPLOAD_DIR / old_filename
                 if old_file.is_file():
                     old_file.unlink()
@@ -130,10 +146,13 @@ async def upload_photo(
     if storage_service.enabled:
         key = f"users/{tipo}/{filename}"
         public_url = storage_service.upload_bytes(key, contents, content_type=file.content_type)
-        if tipo == "avatar":
-            pilot_profile.foto = public_url
+        if current_user.role == Role.COACH.value:
+            coach.foto = public_url
         else:
-            pilot_profile.foto_moto = public_url
+            if tipo == "avatar":
+                pilot_profile.foto = public_url
+            else:
+                pilot_profile.foto_moto = public_url
         db.commit()
         return UploadPhotoResponse(url=public_url)
     else:
@@ -142,12 +161,14 @@ async def upload_photo(
         with open(UPLOAD_DIR / filename, "wb") as fp:
             fp.write(contents)
 
-        # Persistir la ruta RELATIVA en BD (no la URL absoluta)
         relative_url = f"/uploads/{filename}"
-        if tipo == "avatar":
-            pilot_profile.foto = relative_url
+        if current_user.role == Role.COACH.value:
+            coach.foto = relative_url
         else:
-            pilot_profile.foto_moto = relative_url
+            if tipo == "avatar":
+                pilot_profile.foto = relative_url
+            else:
+                pilot_profile.foto_moto = relative_url
         db.commit()
 
         return UploadPhotoResponse(url=relative_url)

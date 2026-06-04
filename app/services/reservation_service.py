@@ -231,10 +231,10 @@ class ReservationService:
             if coach_overlaps:
                 availability_available = False
         
-        # Calcular total
+        # Calcular total. Taxes are currently not applied.
         subtotal = track_total + coach_total
-        tax = round(subtotal * 0.1, 2)  # 10% de impuesto
-        total = round(subtotal + tax, 2)
+        tax = 0.0
+        total = round(subtotal, 2)
 
         if track_slot:
             overlaps = ReservationRepository.get_overlapping_reservations(
@@ -403,6 +403,12 @@ class ReservationService:
             mode=mode,
             participants=participants,
         )
+
+        if not cost_info["availability_available"]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The track or coach is not available at that time",
+            )
         
         # Crear reserva directamente con estado CONFIRMED
         reservation = ReservationRepository.create_reservation(

@@ -48,17 +48,8 @@ class UserService:
     
     def get_my_profile(self, user_id: int) -> UserProfileResponse:
         """
-        Obtener perfil completo del usuario piloto
-        HU-05: Ver perfil
-        
-        Args:
-            user_id: ID del usuario
-            
-        Returns:
-            Perfil completo del usuario con información de piloto
-            
-        Raises:
-            HTTPException: Si el usuario no existe, no es piloto o no tiene perfil
+        Obtener perfil completo del usuario (piloto o coach)
+        HU-05 / HU-09: Ver perfil
         """
         # Obtener usuario con perfil
         user = self.user_repo.get_user_with_profile(user_id)
@@ -69,48 +60,63 @@ class UserService:
                 detail="User not found"
             )
         
-        # Verificar que sea piloto
-        if user.role != Role.PILOT.value:
+        # Permitir tanto pilotos como coaches
+        if user.role not in (Role.PILOT.value, Role.COACH.value):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only riders can view their profile"
+                detail="Only riders and coaches can view their profile"
             )
         
-        # Si no tiene perfil, crear uno por defecto
-        if not user.pilot_profile:
-            profile_data = PilotProfileCreate()
-            self.user_repo.create_pilot_profile(user_id, profile_data)
-            # Refrescar usuario para obtener el perfil
-            user = self.user_repo.get_user_with_profile(user_id)
-        
-        # Construir respuesta
-        return UserProfileResponse(
-            id=user.id,
-            email=user.email,
-            nombre=user.nombre,
-            foto=user.pilot_profile.foto,
-            foto_moto=user.pilot_profile.foto_moto,
-            nivel=user.pilot_profile.nivel,
-            moto=user.pilot_profile.moto
-        )
+        if user.role == Role.PILOT.value:
+            # Si no tiene perfil de piloto, crear uno por defecto
+            if not user.pilot_profile:
+                profile_data = PilotProfileCreate()
+                self.user_repo.create_pilot_profile(user_id, profile_data)
+                # Refrescar usuario para obtener el perfil
+                user = self.user_repo.get_user_with_profile(user_id)
+            
+            return UserProfileResponse(
+                id=user.id,
+                email=user.email,
+                nombre=user.nombre,
+                foto=user.pilot_profile.foto,
+                foto_moto=user.pilot_profile.foto_moto,
+                nivel=user.pilot_profile.nivel,
+                moto=user.pilot_profile.moto,
+                role=user.role,
+                status=user.status
+            )
+        else:
+            # Es un coach
+            from app.repositories.coach_repository import CoachRepository
+            coach_repo = CoachRepository(self.db)
+            coach = coach_repo.get_by_user_id(user_id)
+            if not coach:
+                # Si no existe, crearlo
+                coach = coach_repo.create(user_id=user_id)
+            
+            return UserProfileResponse(
+                id=user.id,
+                email=user.email,
+                nombre=user.nombre,
+                foto=coach.foto,
+                foto_moto=None,
+                nivel=None,
+                moto=None,
+                role=user.role,
+                status=coach.status,
+                telefono=user.telefono,
+                bio=coach.bio,
+                experience=coach.experience,
+                certificate_url=coach.certificate_url
+            )
 
     def update_my_profile(
         self, user_id: int, profile_data: UpdateUserProfileRequest
     ) -> UserProfileResponse:
         """
-        Actualizar perfil del piloto autenticado
-        HU-06: Editar perfil
-
-        Args:
-            user_id: ID del usuario
-            profile_data: Datos a actualizar (nombre, foto, nivel, moto)
-
-        Returns:
-            Perfil actualizado
-
-        Raises:
-            HTTPException 404: Si el usuario no existe
-            HTTPException 403: Si el usuario no es piloto
+        Actualizar perfil del usuario autenticado (piloto o coach)
+        HU-06 / CRUD coach
         """
         user = self.user_repo.get_by_id(user_id)
         if not user:
@@ -119,21 +125,63 @@ class UserService:
                 detail="User not found",
             )
 
-        if user.role != Role.PILOT.value:
+        if user.role not in (Role.PILOT.value, Role.COACH.value):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only riders can edit their profile",
+                detail="Only riders and coaches can edit their profile",
             )
 
-        updated_user = self.user_repo.update_user_profile(user_id, profile_data)
-
-        pilot_profile = updated_user.pilot_profile
-        return UserProfileResponse(
-            id=updated_user.id,
-            email=updated_user.email,
-            nombre=updated_user.nombre,
-            foto=pilot_profile.foto if pilot_profile else None,
-            foto_moto=pilot_profile.foto_moto if pilot_profile else None,
-            nivel=pilot_profile.nivel if pilot_profile else "BEGINNER",
-            moto=pilot_profile.moto if pilot_profile else None,
-        )
+        if user.role == Role.PILOT.value:
+            updated_user = self.user_repo.update_user_profile(user_id, profile_data)
+            pilot_profile = updated_user.pilot_profile
+            return UserProfileResponse(
+                id=updated_user.id,
+                email=updated_user.email,
+                nombre=updated_user.nombre,
+                foto=pilot_profile.foto if pilot_profile else None,
+                foto_moto=pilot_profile.foto_moto if pilot_profile else None,
+                nivel=pilot_profile.nivel if pilot_profile else "BEGINNER",
+                moto=pilot_profile.moto if pilot_profile else None,
+                role=updated_user.role,
+                status=updated_user.status
+            )
+        else:
+            # Es un coach
+            # Actualizar nombre y teléfono en User
+            user.nombre = profile_data.nombre
+            if profile_data.telefono is not None:
+                user.telefono = profile_data.telefono
+            
+            # Obtener y actualizar coach
+            from app.repositories.coach_repository import CoachRepository
+            coach_repo = CoachRepository(self.db)
+            coach = coach_repo.get_by_user_id(user_id)
+            if not coach:
+                coach = coach_repo.create(user_id=user_id)
+            
+            if profile_data.foto is not None:
+                coach.foto = profile_data.foto
+            if profile_data.bio is not None:
+                coach.bio = profile_data.bio
+            if profile_data.experience is not None:
+                coach.experience = profile_data.experience
+            
+            self.db.commit()
+            self.db.refresh(user)
+            self.db.refresh(coach)
+            
+            return UserProfileResponse(
+                id=user.id,
+                email=user.email,
+                nombre=user.nombre,
+                foto=coach.foto,
+                foto_moto=None,
+                nivel=None,
+                moto=None,
+                role=user.role,
+                status=coach.status,
+                telefono=user.telefono,
+                bio=coach.bio,
+                experience=coach.experience,
+                certificate_url=coach.certificate_url
+            )

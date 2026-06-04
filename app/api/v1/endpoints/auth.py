@@ -176,7 +176,7 @@ def login(
     
     return LoginResponse(
         token=access_token,
-        user={"id": user.id, "email": user.email},
+        user={"id": user.id, "email": user.email, "nombre": user.nombre},
         role=user.role,
         status=user.status,
     )

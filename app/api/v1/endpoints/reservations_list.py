@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from datetime import date, datetime
 
 from app.api.deps import get_db, get_current_active_user
 from app.models import User
@@ -12,6 +13,20 @@ from app.services.reservation_service import ReservationService
 
 
 router = APIRouter()
+
+
+def _reservation_display_status(res) -> str:
+    raw_status = getattr(res.status, "value", res.status)
+    if raw_status == "CANCELLED":
+        return "CANCELLED"
+
+    reservation_end = datetime.combine(res.reservation_date, res.end_time)
+    if reservation_end <= datetime.now():
+        return "PAST"
+
+    if res.reservation_date < date.today():
+        return "PAST"
+    return "CONFIRMED"
 
 
 def _reservation_list_response(res) -> ReservationListResponse:
@@ -33,7 +48,7 @@ def _reservation_list_response(res) -> ReservationListResponse:
         coach_price=res.coach_price,
         total_amount=res.total_amount,
         coach_earnings=res.coach_price,
-        status=getattr(res.status, "value", res.status),
+        status=_reservation_display_status(res),
         created_at=res.created_at.isoformat(),
     )
 
@@ -109,7 +124,7 @@ def get_reservation_detail(
         track_price=reservation.track_price,
         coach_price=reservation.coach_price,
         total_amount=reservation.total_amount,
-        status=reservation.status,
+        status=_reservation_display_status(reservation),
         payment=payment_detail,
         created_at=reservation.created_at.isoformat(),
     )
