@@ -8,9 +8,17 @@ connect_args = {}
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
+# Railway PostgreSQL normalmente requiere TLS; si la URL no lo trae explícito,
+# lo añadimos para evitar errores de arranque por conexión insegura.
+database_url = settings.DATABASE_URL
+if database_url.startswith(("postgresql://", "postgres://")) and "sslmode=" not in database_url:
+    if ".proxy.rlwy.net" in database_url or "railway.app" in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{separator}sslmode=require"
+
 # Crear engine de SQLAlchemy
 engine = create_engine(
-    settings.DATABASE_URL, 
+    database_url,
     pool_pre_ping=True,
     connect_args=connect_args
 )
