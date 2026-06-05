@@ -72,7 +72,7 @@ class DirectConfirmReservationResponse(BaseModel):
     total: float = Field(..., description="Total de la reserva")
     status: str = Field(default="CONFIRMED", description="Estado de la reserva (siempre CONFIRMED)")
     currency: str = Field(default="AUD")
-    message: str = Field(default="Reserva confirmada exitosamente")
+    message: str = Field(default="Reservation confirmed successfully")
 
 
 class CancelReservationResponse(BaseModel):

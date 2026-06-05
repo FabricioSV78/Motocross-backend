@@ -75,7 +75,7 @@ def create_reservation(
     if role_value != "PILOT":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo PILOTS pueden crear reservas",
+            detail="Only pilot users can create reservations",
         )
 
     # If skip_payment is requested (default True), create reservation without PaymentIntent
@@ -100,7 +100,7 @@ def create_reservation(
             total=reservation_info["total"],
             status="CONFIRMED",
             currency=reservation_info["currency"],
-            message="Reserva confirmada exitosamente (pago en persona)",
+            message="Reservation confirmed successfully",
         )
 
     # Otherwise, proceed with PaymentIntent creation
@@ -167,7 +167,7 @@ def create_reservation_without_payment(
     if role_value != "PILOT":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo PILOTS pueden crear reservas",
+            detail="Only pilot users can create reservations",
         )
 
     reservation_info = ReservationService.create_reservation_without_payment(
@@ -190,5 +190,5 @@ def create_reservation_without_payment(
         total=reservation_info["total"],
         status="CONFIRMED",
         currency=reservation_info["currency"],
-        message="Reserva confirmada exitosamente",
+        message="Reservation confirmed successfully",
     )

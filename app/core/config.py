@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # CORS
-    BACKEND_CORS_ORIGINS: str = '["http://localhost:3000", "http://localhost:8000"]'
+    BACKEND_CORS_ORIGINS: str = '["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"]'
     
     # Stripe
     STRIPE_SECRET_KEY: str = ""  # sk_test_... o sk_live_...
