@@ -180,13 +180,17 @@ class UserRepository:
             )
             self.db.add(db_profile)
         else:
-            user.pilot_profile.foto = data.foto
-            user.pilot_profile.foto_moto = data.foto_moto
+            provided_fields = data.model_fields_set
+            if "foto" in provided_fields:
+                user.pilot_profile.foto = data.foto
+            if "foto_moto" in provided_fields:
+                user.pilot_profile.foto_moto = data.foto_moto
             if data.nivel is not None:
                 user.pilot_profile.nivel = (
                     data.nivel.value if isinstance(data.nivel, PilotLevel) else data.nivel
                 )
-            user.pilot_profile.moto = data.moto
+            if "moto" in provided_fields:
+                user.pilot_profile.moto = data.moto
 
         self.db.commit()
         self.db.refresh(user)
